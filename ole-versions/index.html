@@ -1,0 +1,871 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Dual Timezone Clock</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0e0e10;
+    --surface: #18181c;
+    --surface2: #222228;
+    --border: #2e2e38;
+    --accent: #c8f04e;
+    --accent2: #4ef0c8;
+    --text: #f0efe8;
+    --muted: #7a7a8c;
+    --clock-face: #16161a;
+    --hand-color: #f0efe8;
+    --hand-accent: #c8f04e;
+    --radius: 16px;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 20px;
+    position: relative;
+    overflow-x: hidden;
+  }
+
+  body::before {
+    content: '';
+    position: fixed;
+    top: -200px; left: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(200, 240, 78, 0.06) 0%, transparent 70%);
+    pointer-events: none;
+  }
+  body::after {
+    content: '';
+    position: fixed;
+    bottom: -200px; right: -200px;
+    width: 600px; height: 600px;
+    background: radial-gradient(circle, rgba(78, 240, 200, 0.05) 0%, transparent 70%);
+    pointer-events: none;
+  }
+
+  header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+  header h1 {
+    font-family: 'DM Serif Display', serif;
+    font-size: clamp(2rem, 5vw, 3.2rem);
+    letter-spacing: -0.02em;
+    color: var(--text);
+    line-height: 1;
+  }
+  header h1 em {
+    color: var(--accent);
+    font-style: italic;
+  }
+  header p {
+    color: var(--muted);
+    font-size: 0.75rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    margin-top: 8px;
+  }
+
+  .clocks-container {
+    display: flex;
+    gap: 32px;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    justify-content: center;
+    position: relative;
+  }
+
+  .clocks-container::before {
+    content: '→';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.5rem;
+    color: var(--accent);
+    z-index: 10;
+    background: var(--bg);
+    padding: 8px 12px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+  }
+
+  .clock-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 28px 24px;
+    width: 300px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 20px;
+    position: relative;
+    transition: border-color 0.3s;
+  }
+  .clock-card:hover { border-color: #3e3e50; }
+  .clock-card.primary { border-color: rgba(200, 240, 78, 0.25); }
+
+  .clock-card .badge {
+    position: absolute;
+    top: -11px;
+    left: 20px;
+    background: var(--accent);
+    color: #0e0e10;
+    font-size: 0.6rem;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 20px;
+  }
+  .clock-card.secondary .badge { background: var(--accent2); }
+
+  /* Dropdown */
+  .select-wrapper {
+    width: 100%;
+    position: relative;
+  }
+  .select-wrapper select {
+    width: 100%;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.72rem;
+    padding: 9px 32px 9px 12px;
+    border-radius: 8px;
+    appearance: none;
+    cursor: pointer;
+    transition: border-color 0.2s, background 0.2s;
+    outline: none;
+  }
+  .select-wrapper select:focus { border-color: var(--accent); background: #1e1e24; }
+  .select-wrapper::after {
+    content: '▾';
+    position: absolute;
+    right: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+    pointer-events: none;
+    font-size: 0.8rem;
+  }
+  .select-wrapper select option { background: #1a1a20; }
+
+  /* Clock Face */
+  .clock-face-wrapper {
+    position: relative;
+    width: 210px;
+    height: 210px;
+  }
+
+  canvas.clock-canvas {
+    display: block;
+    cursor: crosshair;
+    border-radius: 50%;
+  }
+
+  /* Time display */
+  .time-display {
+    font-family: 'DM Serif Display', serif;
+    font-size: 2rem;
+    letter-spacing: -0.02em;
+    color: var(--text);
+    text-align: center;
+    line-height: 1;
+  }
+  .time-display .seconds {
+    font-size: 1rem;
+    color: var(--muted);
+    vertical-align: super;
+  }
+  .time-display .period {
+    font-size: 0.9rem;
+    color: var(--accent);
+    margin-left: 4px;
+  }
+  .clock-card.secondary .time-display .period { color: var(--accent2); }
+
+  /* Time zone label */
+  .tz-label {
+    font-size: 0.65rem;
+    color: var(--muted);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    text-align: center;
+  }
+
+  /* Manual input */
+  .time-input-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    width: 100%;
+  }
+  .time-input-row input[type="time"] {
+    flex: 1;
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.8rem;
+    padding: 8px 10px;
+    border-radius: 8px;
+    outline: none;
+    transition: border-color 0.2s;
+    cursor: pointer;
+  }
+  .time-input-row input[type="time"]:focus { border-color: var(--accent); }
+  .time-input-row input[type="time"]::-webkit-calendar-picker-indicator {
+    filter: invert(0.6);
+    cursor: pointer;
+  }
+  .time-input-row button {
+    background: var(--accent);
+    border: none;
+    color: #0e0e10;
+    font-family: 'DM Mono', monospace;
+    font-size: 0.7rem;
+    font-weight: 500;
+    padding: 8px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    white-space: nowrap;
+  }
+  .time-input-row button:hover { opacity: 0.85; }
+  .time-input-row button:active { transform: scale(0.96); }
+
+  .reset-btn {
+    background: none;
+    border: 1px solid var(--border);
+    color: var(--muted);
+    font-family: 'DM Mono', monospace;
+    font-size: 0.65rem;
+    letter-spacing: 0.1em;
+    padding: 6px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.2s;
+    width: 100%;
+    text-transform: uppercase;
+  }
+  .reset-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+  .drag-hint {
+    font-size: 0.62rem;
+    color: var(--muted);
+    letter-spacing: 0.1em;
+    text-align: center;
+  }
+
+  /* Offset badge */
+  .offset-badge {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 8px 16px;
+    font-size: 0.7rem;
+    color: var(--muted);
+    text-align: center;
+    margin-top: 8px;
+    letter-spacing: 0.05em;
+  }
+  .offset-badge span { color: var(--accent2); font-weight: 500; }
+
+  @media (max-width: 680px) {
+    .clocks-container::before { display: none; }
+    .clocks-container { gap: 24px; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Dual<em>Zone</em></h1>
+  <p>Interactive Timezone Converter</p>
+</header>
+
+<div class="clocks-container">
+
+  <!-- Clock 1 (Primary) -->
+  <div class="clock-card primary" id="card1">
+    <div class="badge">Your Time</div>
+    <div class="select-wrapper">
+      <select id="tz1-select"></select>
+    </div>
+    <div class="clock-face-wrapper">
+      <canvas class="clock-canvas" id="clock1" width="210" height="210"></canvas>
+    </div>
+    <div class="time-display" id="time1-display">
+      <span id="time1-hm">--:--</span><span class="seconds" id="time1-s">:--</span><span class="period" id="time1-p"></span>
+    </div>
+    <div class="tz-label" id="tz1-label">Detecting timezone…</div>
+    <div class="time-input-row">
+      <input type="time" id="manual-time1" step="60">
+      <button onclick="applyManualTime()">Set</button>
+    </div>
+    <button class="reset-btn" onclick="resetToNow()">↺ Reset to Now</button>
+    <div class="drag-hint">drag the clock hands to set time</div>
+  </div>
+
+  <!-- Clock 2 (Secondary) -->
+  <div class="clock-card secondary" id="card2">
+    <div class="badge">Remote Time</div>
+    <div class="select-wrapper">
+      <select id="tz2-select">
+        <option value="">— Select a timezone —</option>
+      </select>
+    </div>
+    <div class="clock-face-wrapper">
+      <canvas class="clock-canvas" id="clock2" width="210" height="210"></canvas>
+    </div>
+    <div class="time-display" id="time2-display">
+      <span id="time2-hm">--:--</span><span class="seconds" id="time2-s">:--</span><span class="period" id="time2-p"></span>
+    </div>
+    <div class="tz-label" id="tz2-label">Select a timezone above</div>
+    <div class="offset-badge" id="offset-badge">Offset: <span id="offset-text">—</span></div>
+  </div>
+
+</div>
+
+<script>
+// ─── Timezone Data ────────────────────────────────────────────────
+const TZ_LIST = [
+  { label: "Africa / Abidjan (GMT+0)", value: "Africa/Abidjan" },
+  { label: "Africa / Cairo (GMT+2)", value: "Africa/Cairo" },
+  { label: "Africa / Johannesburg (GMT+2)", value: "Africa/Johannesburg" },
+  { label: "Africa / Lagos (GMT+1)", value: "Africa/Lagos" },
+  { label: "Africa / Nairobi (GMT+3)", value: "Africa/Nairobi" },
+  { label: "America / Anchorage", value: "America/Anchorage" },
+  { label: "America / Argentina / Buenos Aires", value: "America/Argentina/Buenos_Aires" },
+  { label: "America / Bogota", value: "America/Bogota" },
+  { label: "America / Chicago (CST)", value: "America/Chicago" },
+  { label: "America / Denver (MST)", value: "America/Denver" },
+  { label: "America / Halifax", value: "America/Halifax" },
+  { label: "America / Los Angeles (PST)", value: "America/Los_Angeles" },
+  { label: "America / Mexico City", value: "America/Mexico_City" },
+  { label: "America / New York (EST)", value: "America/New_York" },
+  { label: "America / Phoenix", value: "America/Phoenix" },
+  { label: "America / Santiago", value: "America/Santiago" },
+  { label: "America / Sao Paulo", value: "America/Sao_Paulo" },
+  { label: "America / Toronto", value: "America/Toronto" },
+  { label: "America / Vancouver", value: "America/Vancouver" },
+  { label: "Asia / Almaty", value: "Asia/Almaty" },
+  { label: "Asia / Bangkok (ICT)", value: "Asia/Bangkok" },
+  { label: "Asia / Colombo", value: "Asia/Colombo" },
+  { label: "Asia / Dhaka", value: "Asia/Dhaka" },
+  { label: "Asia / Dubai (GST)", value: "Asia/Dubai" },
+  { label: "Asia / Hong Kong", value: "Asia/Hong_Kong" },
+  { label: "Asia / Jakarta", value: "Asia/Jakarta" },
+  { label: "Asia / Karachi", value: "Asia/Karachi" },
+  { label: "Asia / Kolkata (IST)", value: "Asia/Kolkata" },
+  { label: "Asia / Kuala Lumpur", value: "Asia/Kuala_Lumpur" },
+  { label: "Asia / Manila", value: "Asia/Manila" },
+  { label: "Asia / Riyadh", value: "Asia/Riyadh" },
+  { label: "Asia / Seoul", value: "Asia/Seoul" },
+  { label: "Asia / Shanghai (CST)", value: "Asia/Shanghai" },
+  { label: "Asia / Singapore", value: "Asia/Singapore" },
+  { label: "Asia / Taipei", value: "Asia/Taipei" },
+  { label: "Asia / Tehran", value: "Asia/Tehran" },
+  { label: "Asia / Tokyo (JST)", value: "Asia/Tokyo" },
+  { label: "Asia / Yangon", value: "Asia/Yangon" },
+  { label: "Atlantic / Azores", value: "Atlantic/Azores" },
+  { label: "Atlantic / Cape Verde", value: "Atlantic/Cape_Verde" },
+  { label: "Australia / Adelaide", value: "Australia/Adelaide" },
+  { label: "Australia / Brisbane", value: "Australia/Brisbane" },
+  { label: "Australia / Darwin", value: "Australia/Darwin" },
+  { label: "Australia / Hobart", value: "Australia/Hobart" },
+  { label: "Australia / Melbourne", value: "Australia/Melbourne" },
+  { label: "Australia / Perth", value: "Australia/Perth" },
+  { label: "Australia / Sydney (AEDT)", value: "Australia/Sydney" },
+  { label: "Europe / Amsterdam", value: "Europe/Amsterdam" },
+  { label: "Europe / Athens", value: "Europe/Athens" },
+  { label: "Europe / Berlin (CET)", value: "Europe/Berlin" },
+  { label: "Europe / Brussels", value: "Europe/Brussels" },
+  { label: "Europe / Budapest", value: "Europe/Budapest" },
+  { label: "Europe / Copenhagen", value: "Europe/Copenhagen" },
+  { label: "Europe / Dublin (IST)", value: "Europe/Dublin" },
+  { label: "Europe / Helsinki", value: "Europe/Helsinki" },
+  { label: "Europe / Istanbul", value: "Europe/Istanbul" },
+  { label: "Europe / Kiev", value: "Europe/Kiev" },
+  { label: "Europe / Lisbon", value: "Europe/Lisbon" },
+  { label: "Europe / London (GMT/BST)", value: "Europe/London" },
+  { label: "Europe / Madrid", value: "Europe/Madrid" },
+  { label: "Europe / Moscow", value: "Europe/Moscow" },
+  { label: "Europe / Oslo", value: "Europe/Oslo" },
+  { label: "Europe / Paris", value: "Europe/Paris" },
+  { label: "Europe / Prague", value: "Europe/Prague" },
+  { label: "Europe / Rome", value: "Europe/Rome" },
+  { label: "Europe / Stockholm", value: "Europe/Stockholm" },
+  { label: "Europe / Vienna", value: "Europe/Vienna" },
+  { label: "Europe / Warsaw", value: "Europe/Warsaw" },
+  { label: "Europe / Zurich", value: "Europe/Zurich" },
+  { label: "Pacific / Auckland", value: "Pacific/Auckland" },
+  { label: "Pacific / Fiji", value: "Pacific/Fiji" },
+  { label: "Pacific / Honolulu (HST)", value: "Pacific/Honolulu" },
+  { label: "Pacific / Noumea", value: "Pacific/Noumea" },
+  { label: "Pacific / Port Moresby", value: "Pacific/Port_Moresby" },
+  { label: "UTC", value: "UTC" },
+];
+
+// ─── State ────────────────────────────────────────────────────────
+let userTZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
+let overrideTime = null; // null = live, otherwise { h, m, s }
+let liveInterval = null;
+let isDragging = false;
+let dragCanvas = null;
+
+// ─── Populate selects ─────────────────────────────────────────────
+function populateSelects() {
+  const sel1 = document.getElementById('tz1-select');
+  const sel2 = document.getElementById('tz2-select');
+
+  TZ_LIST.forEach(tz => {
+    const o1 = new Option(tz.label, tz.value);
+    sel1.appendChild(o1);
+    const o2 = new Option(tz.label, tz.value);
+    sel2.appendChild(o2);
+  });
+
+  // Set sel1 to user's timezone
+  const match = TZ_LIST.find(t => t.value === userTZ);
+  if (match) sel1.value = userTZ;
+  else sel1.value = TZ_LIST[0].value;
+
+  sel2.value = '';
+}
+
+// ─── Time helpers ─────────────────────────────────────────────────
+function getTimeInTZ(tz, baseDate) {
+  const d = baseDate || new Date();
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: tz,
+    hour: 'numeric', minute: 'numeric', second: 'numeric',
+    hour12: false
+  }).formatToParts(d);
+  const get = t => parseInt(parts.find(p => p.type === t)?.value || '0', 10);
+  let h = get('hour'); const m = get('minute'); const s = get('second');
+  if (h === 24) h = 0;
+  return { h, m, s };
+}
+
+function getTZOffsetMinutes(tz) {
+  const now = new Date();
+  const utcMs = now.getTime() + now.getTimezoneOffset() * 60000;
+  const tzDate = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+  const utcDate = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+  return (tzDate - utcDate) / 60000;
+}
+
+function formatOffsetLabel(tz) {
+  const mins = getTZOffsetMinutes(tz);
+  const sign = mins >= 0 ? '+' : '-';
+  const abs = Math.abs(mins);
+  const h = Math.floor(abs / 60).toString().padStart(2, '0');
+  const m = (abs % 60).toString().padStart(2, '0');
+  return `UTC${sign}${h}:${m}`;
+}
+
+// ─── Sun / Moon helpers ───────────────────────────────────────────
+function isDay(h) { return h >= 6 && h < 18; }
+
+function drawSun(ctx, x, y, size) {
+  ctx.save();
+  ctx.globalAlpha = 0.82;
+  // Glow
+  const grd = ctx.createRadialGradient(x, y, 0, x, y, size * 2.2);
+  grd.addColorStop(0, 'rgba(255,220,60,0.22)');
+  grd.addColorStop(1, 'rgba(255,220,60,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  // Rays
+  ctx.strokeStyle = '#ffd93d';
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
+  for (let i = 0; i < 8; i++) {
+    const a = (i / 8) * Math.PI * 2;
+    const r1 = size + 2.5, r2 = size + 6;
+    ctx.beginPath();
+    ctx.moveTo(x + Math.cos(a) * r1, y + Math.sin(a) * r1);
+    ctx.lineTo(x + Math.cos(a) * r2, y + Math.sin(a) * r2);
+    ctx.stroke();
+  }
+  // Disc
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fillStyle = '#ffd93d';
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawMoon(ctx, x, y, size) {
+  ctx.save();
+  ctx.globalAlpha = 0.85;
+  // Glow
+  const grd = ctx.createRadialGradient(x, y, 0, x, y, size * 2.4);
+  grd.addColorStop(0, 'rgba(160,180,255,0.18)');
+  grd.addColorStop(1, 'rgba(160,180,255,0)');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(x, y, size * 2.4, 0, Math.PI * 2);
+  ctx.fill();
+  // Crescent: full circle minus offset circle
+  ctx.beginPath();
+  ctx.arc(x, y, size, 0, Math.PI * 2);
+  ctx.fillStyle = '#b8c8ff';
+  ctx.fill();
+  // Cut out bite
+  ctx.beginPath();
+  ctx.arc(x + size * 0.5, y - size * 0.1, size * 0.78, 0, Math.PI * 2);
+  ctx.fillStyle = '#16161a';
+  ctx.fill();
+  // Stars
+  const stars = [[x + size * 1.8, y - size * 0.6, 1.1], [x + size * 1.4, y + size * 1.1, 0.7], [x + size * 2.4, y + size * 0.3, 0.8]];
+  ctx.fillStyle = '#b8c8ff';
+  stars.forEach(([sx, sy, sr]) => {
+    ctx.globalAlpha = 0.6;
+    ctx.beginPath();
+    ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// ─── Canvas Drawing ───────────────────────────────────────────────
+function drawClock(canvasId, h, m, s, accent, isPrimary) {
+  const canvas = document.getElementById(canvasId);
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const cx = W / 2, cy = H / 2, r = W / 2 - 6;
+
+  ctx.clearRect(0, 0, W, H);
+
+  const day = isDay(h);
+
+  // Face — subtle tinted background
+  const faceGrd = ctx.createRadialGradient(cx, cy - r * 0.3, 0, cx, cy, r);
+  if (day) {
+    faceGrd.addColorStop(0, '#1e1e16');
+    faceGrd.addColorStop(1, '#16161a');
+  } else {
+    faceGrd.addColorStop(0, '#13131e');
+    faceGrd.addColorStop(1, '#0e0e16');
+  }
+  ctx.beginPath();
+  ctx.arc(cx, cy, r, 0, Math.PI * 2);
+  ctx.fillStyle = faceGrd;
+  ctx.fill();
+  ctx.strokeStyle = accent + '44';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Inner ring
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 8, 0, Math.PI * 2);
+  ctx.strokeStyle = '#2e2e38';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  // Sun or Moon icon in lower half
+  const iconX = cx, iconY = cy + r * 0.44;
+  const iconSize = 7;
+  if (day) drawSun(ctx, iconX, iconY, iconSize);
+  else drawMoon(ctx, iconX, iconY, iconSize);
+
+  // Hour markers
+  for (let i = 0; i < 12; i++) {
+    const angle = (i / 12) * Math.PI * 2 - Math.PI / 2;
+    const isMain = i % 3 === 0;
+    const len = isMain ? 10 : 5;
+    const innerR = r - 10 - len;
+    const outerR = r - 10;
+    ctx.beginPath();
+    ctx.moveTo(cx + Math.cos(angle) * innerR, cy + Math.sin(angle) * innerR);
+    ctx.lineTo(cx + Math.cos(angle) * outerR, cy + Math.sin(angle) * outerR);
+    ctx.strokeStyle = isMain ? '#5a5a70' : '#3a3a48';
+    ctx.lineWidth = isMain ? 2 : 1;
+    ctx.stroke();
+  }
+
+  // Second arc (progress)
+  const secFrac = s / 60;
+  ctx.beginPath();
+  ctx.arc(cx, cy, r - 4, -Math.PI / 2, -Math.PI / 2 + secFrac * Math.PI * 2);
+  ctx.strokeStyle = accent + '55';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Hour hand
+  const hAngle = ((h % 12) + m / 60 + s / 3600) / 12 * Math.PI * 2 - Math.PI / 2;
+  drawHand(ctx, cx, cy, hAngle, r * 0.52, 4, '#f0efe8', isPrimary);
+
+  // Minute hand
+  const mAngle = (m + s / 60) / 60 * Math.PI * 2 - Math.PI / 2;
+  drawHand(ctx, cx, cy, mAngle, r * 0.74, 2.5, accent, isPrimary);
+
+  // Second hand (thin)
+  if (!isPrimary || !isDragging) {
+    const sAngle = s / 60 * Math.PI * 2 - Math.PI / 2;
+    ctx.save();
+    ctx.beginPath();
+    ctx.moveTo(cx - Math.cos(sAngle) * 12, cy - Math.sin(sAngle) * 12);
+    ctx.lineTo(cx + Math.cos(sAngle) * (r * 0.78), cy + Math.sin(sAngle) * (r * 0.78));
+    ctx.strokeStyle = accent;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.6;
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // Center dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+  ctx.fillStyle = accent;
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(cx, cy, 2.5, 0, Math.PI * 2);
+  ctx.fillStyle = '#16161a';
+  ctx.fill();
+}
+
+function drawHand(ctx, cx, cy, angle, length, width, color, hasHandle) {
+  const tx = cx + Math.cos(angle) * length;
+  const ty = cy + Math.sin(angle) * length;
+  const backLen = length * 0.2;
+  const bx = cx - Math.cos(angle) * backLen;
+  const by = cy - Math.sin(angle) * backLen;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(bx, by);
+  ctx.lineTo(tx, ty);
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'round';
+  ctx.stroke();
+
+  // Handle circle at tip — bigger & outlined for easier grabbing
+  if (hasHandle) {
+    ctx.beginPath();
+    ctx.arc(tx, ty, width + 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(tx, ty, width + 3.5, 0, Math.PI * 2);
+    ctx.strokeStyle = '#ffffff33';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+// ─── Display update ───────────────────────────────────────────────
+function updateDisplayText(prefix, h, m, s) {
+  const hm = document.getElementById(`${prefix}-hm`);
+  const sec = document.getElementById(`${prefix}-s`);
+  const per = document.getElementById(`${prefix}-p`);
+  const period = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  hm.textContent = `${h12.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+  sec.textContent = `:${s.toString().padStart(2,'0')}`;
+  per.textContent = period;
+}
+
+// ─── Main render ──────────────────────────────────────────────────
+function render() {
+  const tz1 = document.getElementById('tz1-select').value;
+  const tz2 = document.getElementById('tz2-select').value;
+
+  let time1;
+  if (overrideTime) {
+    time1 = { ...overrideTime };
+    // tick seconds if live-ish (no, only tick when override active we keep static)
+  } else {
+    time1 = getTimeInTZ(tz1);
+  }
+
+  drawClock('clock1', time1.h, time1.m, time1.s, '#c8f04e', true);
+  updateDisplayText('time1', time1.h, time1.m, time1.s);
+  document.getElementById('tz1-label').textContent = tz1 ? formatOffsetLabel(tz1) + ' — ' + tz1.replace('_', ' ') : '';
+
+  if (tz2) {
+    let time2;
+    if (overrideTime) {
+      // Compute offset diff
+      const off1 = getTZOffsetMinutes(tz1);
+      const off2 = getTZOffsetMinutes(tz2);
+      const diffMins = off2 - off1;
+      let totalMins = time1.h * 60 + time1.m + diffMins;
+      totalMins = ((totalMins % 1440) + 1440) % 1440;
+      const h2 = Math.floor(totalMins / 60);
+      const m2 = totalMins % 60;
+      time2 = { h: h2, m: m2, s: time1.s };
+    } else {
+      time2 = getTimeInTZ(tz2);
+    }
+    drawClock('clock2', time2.h, time2.m, time2.s, '#4ef0c8', false);
+    updateDisplayText('time2', time2.h, time2.m, time2.s);
+    document.getElementById('tz2-label').textContent = formatOffsetLabel(tz2) + ' — ' + tz2.replace('_', ' ');
+
+    // Offset
+    const diff = getTZOffsetMinutes(tz2) - getTZOffsetMinutes(tz1);
+    const sign = diff >= 0 ? '+' : '-';
+    const abs = Math.abs(diff);
+    const dh = Math.floor(abs / 60);
+    const dm = abs % 60;
+    const label = dm > 0 ? `${sign}${dh}h ${dm}m` : `${sign}${dh}h`;
+    document.getElementById('offset-text').textContent = `${label} from your time`;
+    document.getElementById('offset-badge').style.display = 'block';
+  } else {
+    drawClock('clock2', 0, 0, 0, '#4ef0c8', false);
+    document.getElementById('time2-hm').textContent = '--:--';
+    document.getElementById('time2-s').textContent = ':--';
+    document.getElementById('time2-p').textContent = '';
+    document.getElementById('tz2-label').textContent = 'Select a timezone above';
+    document.getElementById('offset-badge').style.display = 'none';
+  }
+}
+
+// ─── Live tick ───────────────────────────────────────────────────
+function startLive() {
+  if (liveInterval) clearInterval(liveInterval);
+  liveInterval = setInterval(() => {
+    if (!overrideTime) render();
+    else render(); // still render for clock2 live ticking on tz2
+  }, 1000);
+}
+
+// ─── Manual time input ───────────────────────────────────────────
+function applyManualTime() {
+  const val = document.getElementById('manual-time1').value;
+  if (!val) return;
+  const [h, m] = val.split(':').map(Number);
+  overrideTime = { h, m, s: 0 };
+  render();
+}
+
+function resetToNow() {
+  overrideTime = null;
+  document.getElementById('manual-time1').value = '';
+  render();
+}
+
+// ─── Clock drag interaction (smooth absolute-angle mapping) ──────
+function getClientPos(e) {
+  return e.touches
+    ? { x: e.touches[0].clientX, y: e.touches[0].clientY }
+    : { x: e.clientX, y: e.clientY };
+}
+
+function getAngleFromPos(canvas, clientX, clientY) {
+  const rect = canvas.getBoundingClientRect();
+  const scaleX = canvas.width / rect.width;
+  const scaleY = canvas.height / rect.height;
+  const x = (clientX - rect.left) * scaleX - canvas.width / 2;
+  const y = (clientY - rect.top) * scaleY - canvas.height / 2;
+  return Math.atan2(y, x); // -π to π
+}
+
+// Normalise angle to 0..2π
+function normAngle(a) { return ((a % (Math.PI * 2)) + Math.PI * 2) % (Math.PI * 2); }
+
+// Smooth shortest-path delta between two angles
+function angleDelta(prev, cur) {
+  let d = normAngle(cur) - normAngle(prev);
+  if (d > Math.PI)  d -= Math.PI * 2;
+  if (d < -Math.PI) d += Math.PI * 2;
+  return d;
+}
+
+function setupDrag(canvasId) {
+  const canvas = document.getElementById(canvasId);
+  let prevAngle = null;
+  // Accumulator in fractional minutes for sub-minute precision
+  let accumMins = 0;
+
+  function onStart(e) {
+    if (canvasId !== 'clock1') return;
+    e.preventDefault();
+    isDragging = true;
+    dragCanvas = canvas;
+    const { x, y } = getClientPos(e);
+    prevAngle = getAngleFromPos(canvas, x, y);
+    accumMins = 0;
+    if (!overrideTime) {
+      const tz1 = document.getElementById('tz1-select').value;
+      overrideTime = { ...getTimeInTZ(tz1) };
+    }
+    canvas.style.cursor = 'grabbing';
+  }
+
+  function onMove(e) {
+    if (!isDragging || dragCanvas !== canvas) return;
+    e.preventDefault();
+    const { x, y } = getClientPos(e);
+    const curAngle = getAngleFromPos(canvas, x, y);
+    const delta = angleDelta(prevAngle, curAngle);
+    prevAngle = curAngle;
+
+    // One full rotation = 60 minutes (minute-hand mapping)
+    accumMins += (delta / (Math.PI * 2)) * 60;
+
+    // Commit whole minutes only, keep fractional remainder
+    const wholeMins = Math.trunc(accumMins);
+    if (wholeMins !== 0) {
+      accumMins -= wholeMins;
+      let totalMins = overrideTime.h * 60 + overrideTime.m + wholeMins;
+      totalMins = ((totalMins % 1440) + 1440) % 1440;
+      overrideTime.h = Math.floor(totalMins / 60);
+      overrideTime.m = totalMins % 60;
+      overrideTime.s = 0;
+
+      const hStr = overrideTime.h.toString().padStart(2,'0');
+      const mStr = overrideTime.m.toString().padStart(2,'0');
+      document.getElementById('manual-time1').value = `${hStr}:${mStr}`;
+      render();
+    }
+  }
+
+  function onEnd() {
+    isDragging = false;
+    dragCanvas = null;
+    prevAngle = null;
+    accumMins = 0;
+    canvas.style.cursor = 'crosshair';
+  }
+
+  canvas.addEventListener('mousedown', onStart);
+  canvas.addEventListener('touchstart', onStart, { passive: false });
+  window.addEventListener('mousemove', onMove);
+  window.addEventListener('touchmove', onMove, { passive: false });
+  window.addEventListener('mouseup', onEnd);
+  window.addEventListener('touchend', onEnd);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────
+populateSelects();
+setupDrag('clock1');
+setupDrag('clock2');
+document.getElementById('tz1-select').addEventListener('change', render);
+document.getElementById('tz2-select').addEventListener('change', render);
+document.getElementById('manual-time1').addEventListener('change', () => {});
+render();
+startLive();
+</script>
+</body>
+</html>
